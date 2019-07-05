@@ -1,0 +1,16 @@
+[package]
+name = "ws-bridge"
+version = "0.1.0"
+authors = ["emliunix <emliunix@hotmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ws = "0.8.1"
+mio = "0.6.19"
+tokio = "0.1.21"
+tokio-reactor = "0.1.9"
+tokio-tcp = "0.1.3"
+tokio-codec = "0.1.1"
+bytes = "0.4.12"
