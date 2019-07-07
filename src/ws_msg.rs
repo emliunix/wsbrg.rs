@@ -145,6 +145,7 @@ impl Into<Bytes> for BrgMsg {
     }
 }
 
+#[cfg(test)]
 mod test {
     use std::convert::TryFrom;
     use bytes::{Bytes};
