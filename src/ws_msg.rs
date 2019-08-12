@@ -56,6 +56,7 @@ use BrgMsg::*;
 use BrgMsgParseError::*;
 
 const U64_SIZE: usize = std::mem::size_of::<u64>();
+const U8_SIZE: usize = std::mem::size_of::<u8>();
 
 impl TryFrom<&Bytes> for BrgMsg {
     type Error = BrgMsgParseError;
@@ -101,7 +102,7 @@ impl TryFrom<&Bytes> for BrgMsg {
             },
             5 => {
                 let data = src.slice_from(1);
-                if data.len() == U64_SIZE {
+                if data.len() == U8_SIZE {
                     let mut buf = data.into_buf();
                     let err_code = buf.get_u8();
                     match FailReason::try_from(err_code) {
