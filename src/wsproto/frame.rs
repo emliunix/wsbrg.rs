@@ -65,9 +65,9 @@ impl Default for Frame {
     fn default() -> Frame {
         Frame {
             fin: true,
-            rsv1: true,
-            rsv2: true,
-            rsv3: true,
+            rsv1: false,
+            rsv2: false,
+            rsv3: false,
             opcode: OpCode::Bad(11),
             mask: None,
             payload: BytesMut::with_capacity(0),
@@ -97,8 +97,13 @@ impl Frame {
     }
 
     pub fn pong() -> Frame {
+        Self::pong_bytes_mut(BytesMut::with_capacity(0))
+    }
+
+    pub fn pong_bytes_mut(b: BytesMut) -> Frame {
         let mut frame = Frame::default();
         frame.opcode = OpCode::Pong;
+        frame.payload = b;
         frame
     }
 
@@ -106,5 +111,28 @@ impl Frame {
         let mut frame = Frame::default();
         frame.opcode = OpCode::Ping;
         frame
+    }
+
+    pub fn text(s: &str) -> Frame {
+        Self::text_bytes_mut(BytesMut::from(s))
+    }
+
+    pub fn text_bytes_mut(b: BytesMut) -> Frame {
+        let mut frame = Frame::default();
+        frame.opcode = OpCode::Text;
+        frame.mask = None;
+        frame.payload = b;
+        frame
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_opcode_eq() {
+        assert_eq!(OpCode::Pong, OpCode::Pong);
+        assert_ne!(OpCode::Ping, OpCode::Pong);
     }
 }

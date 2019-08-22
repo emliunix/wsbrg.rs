@@ -31,7 +31,10 @@ fn process_ws_frame(mut msg: Frame) -> Option<Frame> {
     // print msg
     println!("Message: {:?}", msg.payload);
     // respond to ping
-    let msg : Frame = Frame::ping();
+    if msg.opcode == OpCode::Text && msg.payload == "echo" {
+        println!("Debug echo");
+        return Some(Frame::text_bytes_mut(msg.payload))
+    }
     if msg.opcode == OpCode::Ping {
         Some(Frame::pong())
     } else {
@@ -39,14 +42,20 @@ fn process_ws_frame(mut msg: Frame) -> Option<Frame> {
     }
 }
 
-fn ws_upgrade(req: Request<Body>) -> Response<Body> {
-    // debug
-    println!("All headers:");
-    for (h, v) in req.headers().iter() {
-        println!("{} => {}", h.as_str(), v.to_str().unwrap());
-    }
-    println!("End all headers");
-    println!("Handling HTTP/WS Request...");
+fn ws_gen_accept_header(v: &str) -> String {
+    let s = format!("{}{}", v, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+    let mut sha1 = crypto::sha1::Sha1::new();
+    sha1.input_str(s.as_str());
+    let mut sha1_bytes = [0u8; 20];
+    sha1.result(&mut sha1_bytes);
+    base64::encode(&sha1_bytes)
+}
+
+enum HandshakeError {
+    InvalidWSRequest,
+}
+
+fn ws_handshake(req: &Request<Body>) -> Result<Response<Body>, HandshakeError> {
     let mut res = Response::new(Body::empty());
     // reject non websocket requests
     let mut is_valid = true;
@@ -86,13 +95,12 @@ fn ws_upgrade(req: Request<Body>) -> Response<Body> {
                 Ok(k) => {
                     if k.len() == 16 {
                         // Sec-WebSocket-Accept
-                        let s = format!("{}{}", v.to_str().unwrap(), "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
-                        let mut sha1 = crypto::sha1::Sha1::new();
-                        sha1.input_str(s.as_str());
-                        let mut sha1_bytes = [0u8; 20];
-                        sha1.result(&mut sha1_bytes);
-                        let s2 = base64::encode(&sha1_bytes);
-                        res.headers_mut().insert(SEC_WEBSOCKET_ACCEPT, HeaderValue::from_str(s2.as_str()).unwrap());
+                        res.headers_mut().insert(
+                            SEC_WEBSOCKET_ACCEPT,
+                            HeaderValue::from_str(
+                                ws_gen_accept_header(v.to_str().unwrap()).as_str()
+                            ).unwrap()
+                        );
                         true
                     } else {
                         eprintln!("base64 decoded sec-websocket-key length mismatch: {}", k.len());
@@ -110,32 +118,78 @@ fn ws_upgrade(req: Request<Body>) -> Response<Body> {
             false
         },
     };
-    if !is_valid {
-        eprintln!("Invalid request");
-        *res.status_mut() = StatusCode::BAD_REQUEST;
-        return res;
+    if is_valid {
+        //    *sec-websocket-protocol,
+        //    *sec-websocket-extension,
+        *res.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+        res.headers_mut().insert(UPGRADE, HeaderValue::from_static("websocket"));
+        res.headers_mut().insert(CONNECTION, HeaderValue::from_static("Upgrade"));
+        Ok(res)
+    } else {
+        Err(HandshakeError::InvalidWSRequest)
+    }
+}
+
+fn ws_upgrade(req: Request<Body>) -> Response<Body> {
+    // debug
+    println!("All headers:");
+    for (h, v) in req.headers().iter() {
+        println!("{} => {}", h.as_str(), v.to_str().unwrap());
+    }
+    println!("End all headers");
+    println!("Handling HTTP/WS Request...");
+    match ws_handshake(&req) {
+        Ok(res) => {
+            tokio::spawn(
+                req.into_body().on_upgrade().then(move |r| {
+                match r {
+                    Ok(upgraded) => {
+                        println!("HTTP Upgraded");
+                    //    let (sink, reader) = Framed::new(upgraded, WsCodec::new()).split();
+                    //    tokio::spawn(sink.send_all(reader.filter_map(process_ws_frame)).then(|_| Ok(()) ));
+                        process_upgraded(upgraded);
+                        Ok(())
+                    },
+                    Err(_) => Err(()),
+                }
+            }));
+            res
+        },
+        Err(_) => {
+            eprintln!("Invalid request");
+            let mut res = Response::new(Body::empty());
+            *res.status_mut() = StatusCode::BAD_REQUEST;
+            res
+        }
     }
 
-    tokio::spawn(
-        req.into_body().on_upgrade().then(move |r| {
-        match r {
-            Ok(upgraded) => {
-                println!("HTTP Upgraded");
-                let (sink, reader) = Framed::new(upgraded, WsCodec::new()).split();
-                tokio::spawn(sink.send_all(reader.filter_map(process_ws_frame)).then(|_| Ok(()) ));
-                Ok(())
-            },
-            Err(_) => Err(()),
-        }
-    }));
-//    *sec-websocket-protocol,
-//    *sec-websocket-extension,
+}
 
-    *res.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
-    res.headers_mut().insert(UPGRADE, HeaderValue::from_static("websocket"));
-    res.headers_mut().insert(CONNECTION, HeaderValue::from_static("Upgrade"));
-    // handling websocket headers
-    res
+use futures::sync::mpsc;
+
+fn process_upgraded(upgraded: Upgraded) {
+    let (sink, reader) = Framed::new(upgraded, WsCodec::new()).split();
+    let (sink_sender, sink_receiver) = mpsc::channel::<Frame>(64);
+    my_spawn(reader.for_each(move |msg| {
+        let sink_sender = (&sink_sender).clone();
+        if let Some(f) = process_ws_frame(msg) {
+            println!("Send back: {:?}", f);
+            my_spawn(sink_sender.send(f));
+        }
+        Ok(())
+    }));
+    my_spawn(sink.send_all(sink_receiver.map_err(|_| ws::Error::new(ws::ErrorKind::Protocol, "some error"))));
+}
+
+use tokio::executor::Spawn;
+
+fn my_spawn<T, E, F>(f: F) -> Spawn where E: std::fmt::Debug, F: Future<Item=T, Error=E> + 'static + Send {
+    tokio::spawn(f.then(|res| {
+        if let Err(e) = res {
+            eprintln!("Error: {:?}", e)
+        }
+        Ok(())
+    }))
 }
 
 pub fn test() {

@@ -12,6 +12,7 @@ use tokio::codec::{LinesCodec, Decoder, Framed, FramedRead};
 
 mod wsproto;
 mod test;
+mod brg_session;
 
 //mod ws_msg;
 //mod some_codecs;
