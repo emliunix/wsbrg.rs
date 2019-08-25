@@ -11,8 +11,9 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::codec::{LinesCodec, Decoder, Framed, FramedRead};
 
 mod wsproto;
-mod test;
-mod brg_session;
+// mod test;
+// mod brg_session;
+mod test_udp;
 
 //mod ws_msg;
 //mod some_codecs;
@@ -126,6 +127,7 @@ mod brg_session;
 
 fn main() {
 //    run();
-    println!("Hello world!!!");
-    test::test();
+    // println!("Hello world!!!");
+    // test::test();
+    test_udp::test();
 }
