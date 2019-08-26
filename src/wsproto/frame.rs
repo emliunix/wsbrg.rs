@@ -1,6 +1,6 @@
 extern crate bytes;
 
-use bytes::{BytesMut, BigEndian, ByteOrder};
+use bytes::{BigEndian, ByteOrder, BytesMut};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpCode {
@@ -82,7 +82,7 @@ impl Frame {
             Some(m) => {
                 let mu32 = BigEndian::read_u32(&m);
                 for i in 0..(self.payload.len() / 4) {
-                    let r = (i*4)..((i+1)*4);
+                    let r = (i * 4)..((i + 1) * 4);
                     let v = BigEndian::read_u32(&self.payload[r.clone()]);
                     let v = mu32 ^ v;
                     BigEndian::write_u32(&mut self.payload[r.clone()], v);

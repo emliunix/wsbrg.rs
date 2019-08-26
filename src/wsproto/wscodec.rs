@@ -1,17 +1,17 @@
-extern crate ws;
 extern crate bytes;
 extern crate tokio_codec;
+extern crate ws;
 
 use super::{Error, ErrorKind, Frame, OpCode};
 
-use tokio::codec::{Encoder, Decoder};
-use bytes::{Bytes, BytesMut, Buf, BufMut, IntoBuf};
+use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
+use tokio::codec::{Decoder, Encoder};
 
 pub struct WsCodec;
 
 impl WsCodec {
     pub fn new() -> Self {
-         WsCodec
+        WsCodec
     }
 }
 
@@ -27,8 +27,8 @@ impl Decoder for WsCodec {
             return Ok(None);
         }
         // parse header
-        let first : u8 = buf.get_u8();
-        let second : u8 = buf.get_u8();
+        let first: u8 = buf.get_u8();
+        let second: u8 = buf.get_u8();
 
         // head
         let fin = first & 0x80 != 0;
@@ -41,8 +41,10 @@ impl Decoder for WsCodec {
         let mut data_len: u64 = (second & 0x7F) as u64;
 
         // required_len
-        let mut full_head_len : u64 = 2;
-        if masked { full_head_len += 4 };
+        let mut full_head_len: u64 = 2;
+        if masked {
+            full_head_len += 4
+        };
         if data_len == 126 {
             full_head_len += 2
         } else if data_len == 127 {
@@ -53,18 +55,20 @@ impl Decoder for WsCodec {
             return Ok(None);
         }
 
-        println!("TRACE: fin = {}, rsv1 = {}, rsv2 = {}, rsv3 = {}, masked = {}, len1 = {}",
-                 fin, rsv1, rsv2, rsv3, masked, data_len);
+        println!(
+            "TRACE: fin = {}, rsv1 = {}, rsv2 = {}, rsv3 = {}, masked = {}, len1 = {}",
+            fin, rsv1, rsv2, rsv3, masked, data_len
+        );
 
         // parse len, mask bits
         data_len = match data_len {
             126 => buf.get_u16_be() as u64,
             127 => buf.get_u64_be(),
-            _ => data_len
+            _ => data_len,
         };
 
         let mask = if masked {
-            let mut mask_buf : [u8; 4] = [0; 4];
+            let mut mask_buf: [u8; 4] = [0; 4];
             buf.take(4).copy_to_slice(&mut mask_buf);
             Some(mask_buf)
         } else {
@@ -107,24 +111,21 @@ impl Encoder for WsCodec {
     type Error = Error;
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // head
-        let x : u8 = item.opcode.into();
-        let first : u8 =
-            (if item.fin {0x80u8} else {0x00u8}) as u8 |
-            (if item.rsv1 {0x40u8} else {0x00u8}) as u8 |
-            (if item.rsv2 {0x20u8} else {0x00u8}) as u8 |
-            (if item.rsv3 {0x10u8} else {0x00u8}) as u8 |
-            x;
+        let x: u8 = item.opcode.into();
+        let first: u8 = (if item.fin { 0x80u8 } else { 0x00u8 }) as u8
+            | (if item.rsv1 { 0x40u8 } else { 0x00u8 }) as u8
+            | (if item.rsv2 { 0x20u8 } else { 0x00u8 }) as u8
+            | (if item.rsv3 { 0x10u8 } else { 0x00u8 }) as u8
+            | x;
         dst.put_u8(first);
         // mask & payload_length
-        let mask_bit : u8 = if item.mask.is_some() {0x80} else {0x00};
+        let mask_bit: u8 = if item.mask.is_some() { 0x80 } else { 0x00 };
         match item.payload.len() {
-            i if i < 126 => {
-                dst.put_u8(mask_bit | (i as u8))
-            },
+            i if i < 126 => dst.put_u8(mask_bit | (i as u8)),
             i if i < 65536 => {
                 dst.put_u8(mask_bit | 126u8);
                 dst.put_u16_be(i as u16);
-            },
+            }
             i => {
                 dst.put_u8(mask_bit | 127u8);
                 dst.put_u64_be(i as u64);
@@ -145,11 +146,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let bytes : [u8; 6] = [
-            0x01, 0x01,
-            0x01, 0x00,
-            0x00, 0x00,
-        ];
+        let bytes: [u8; 6] = [0x01, 0x01, 0x01, 0x00, 0x00, 0x00];
 
         let mut codec = WsCodec::new();
         let mut bytes = BytesMut::from(&bytes[..]);

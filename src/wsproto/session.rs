@@ -13,19 +13,23 @@ pub enum SessionState {
     Close,
 }
 
-struct Session<H> where H: Handler {
+struct Session<H>
+where
+    H: Handler,
+{
     state: SessionState,
     handler: H,
 }
 
-impl<H> Session<H> where H: Handler {
+impl<H> Session<H>
+where
+    H: Handler,
+{
     pub fn new(h: H) -> Self {
         Session {
             state: SessionState::Connecting,
             handler: h,
         }
     }
-    pub fn on_frame(frame: Frame) {
-
-    }
+    pub fn on_frame(frame: Frame) {}
 }
