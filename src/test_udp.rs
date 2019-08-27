@@ -32,7 +32,7 @@ fn test_msg() -> impl Future<Item = (), Error = ()> {
     let from_addr = "0.0.0.0:8000"
         .parse::<SocketAddr>()
         .expect("invalid socketAddr");
-    let to_addr = "0.0.0.0:8888"
+    let to_addr = "127.0.0.1:8888"
         .parse::<SocketAddr>()
         .expect("invalid socketAddr");
     let udp_socket = UdpSocket::bind(&from_addr).expect("Failed to create UdpSocket");
